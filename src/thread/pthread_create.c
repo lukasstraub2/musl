@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 #include <string.h>
 #include <stddef.h>
+#include "tls_map.h"
 
 static void dummy_0()
 {
@@ -114,6 +115,7 @@ _Noreturn void __pthread_exit(void *result)
 	 * see the thread as having exited. Release it now so that no
 	 * remaining locks (except thread list) are held if we end up
 	 * resetting need_locks below. */
+	__tls_map_del(self->tid);
 	self->tid = 0;
 	UNLOCK(self->killlock);
 
@@ -189,6 +191,7 @@ struct start_args {
 	void *start_arg;
 	volatile int control;
 	unsigned long sig_mask[_NSIG/8/sizeof(long)];
+	pthread_t tls;
 };
 
 static int start(void *p)
@@ -203,6 +206,7 @@ static int start(void *p)
 			for (;;) __syscall(SYS_exit, 0);
 		}
 	}
+	__tls_map_set(TP_ADJ(args->tls), TP_ADJ(args->tls), args->tls->tid);
 	__syscall(SYS_rt_sigprocmask, SIG_SETMASK, &args->sig_mask, 0, _NSIG/8);
 	__pthread_exit(args->start_func(args->start_arg));
 	return 0;
@@ -211,6 +215,7 @@ static int start(void *p)
 static int start_c11(void *p)
 {
 	struct start_args *args = p;
+	__tls_map_set(TP_ADJ(args->tls), TP_ADJ(args->tls), args->tls->tid);
 	int (*start)(void*) = (int(*)(void*)) args->start_func;
 	__pthread_exit((void *)(uintptr_t)start(args->start_arg));
 	return 0;
@@ -337,6 +342,7 @@ int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict att
 	args->start_func = entry;
 	args->start_arg = arg;
 	args->control = attr._a_sched ? 1 : 0;
+	args->tls = new;
 
 	/* Application signals (but not the synccall signal) must be
 	 * blocked before the thread list lock can be taken, to ensure

@@ -8,6 +8,7 @@
 #include "libc.h"
 #include "atomic.h"
 #include "syscall.h"
+#include "tls_map.h"
 
 volatile int __thread_list_lock;
 
@@ -15,7 +16,11 @@ int __init_tp(void *p)
 {
 	pthread_t td = p;
 	td->self = td;
-	int r = __set_thread_area(TP_ADJ(p));
+	int r = __tls_map_init();
+	if (r < 0) return -1;
+	r = __set_thread_area(TP_ADJ(p));
+	if (r < 0) return -1;
+	r = __tls_map_set(TP_ADJ(p), TP_ADJ(p), __syscall(__NR_gettid));
 	if (r < 0) return -1;
 	if (!r) libc.can_do_threads = 1;
 	td->detach_state = DT_JOINABLE;

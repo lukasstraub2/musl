@@ -12,6 +12,7 @@
 #include "futex.h"
 
 #include "pthread_arch.h"
+#include "tls_map.h"
 
 #define pthread __pthread
 
@@ -117,10 +118,10 @@ enum {
 
 #ifdef TLS_ABOVE_TP
 #define TP_ADJ(p) ((char *)(p) + sizeof(struct pthread) + TP_OFFSET)
-#define __pthread_self() ((pthread_t)(__get_tp() - sizeof(struct __pthread) - TP_OFFSET))
+#define __pthread_self() ((pthread_t)(__tls_map_get_tp() - sizeof(struct __pthread) - TP_OFFSET))
 #else
 #define TP_ADJ(p) (p)
-#define __pthread_self() ((pthread_t)__get_tp())
+#define __pthread_self() ((pthread_t)__tls_map_get_tp())
 #endif
 
 #ifndef tls_mod_off_t
