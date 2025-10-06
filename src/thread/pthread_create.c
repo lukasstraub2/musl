@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stddef.h>
 #include "tls_map.h"
+#include <assert.h>
 
 static void dummy_0()
 {
@@ -98,7 +99,7 @@ _Noreturn void __pthread_exit(void *result)
 	/* If this is the only thread in the list, don't proceed with
 	 * termination of the thread, but restore the previous lock and
 	 * signal state to prepare for exit to call atexit handlers. */
-	if (self->next == self) {
+	if (libc.threads_minus_1 == 0) {
 		__tl_unlock();
 		UNLOCK(self->killlock);
 		self->detach_state = state;
@@ -150,6 +151,10 @@ _Noreturn void __pthread_exit(void *result)
 	self->next->prev = self->prev;
 	self->prev->next = self->next;
 	self->prev = self->next = self;
+
+	if (self->external_thread) {
+		__tl_unlock();
+	}
 
 	if (state==DT_DETACHED && self->map_base) {
 		/* Detached threads must block even implementation-internal
@@ -239,6 +244,77 @@ static void init_file_lock(FILE *f)
 	if (f && f->lock<0) f->lock = 0;
 }
 
+int __main_prepare_threaded() {
+	if (!libc.can_do_threads) return ENOSYS;
+	if (!libc.threaded) {
+		for (FILE *f=*__ofl_lock(); f; f=f->next)
+			init_file_lock(f);
+		__ofl_unlock();
+		init_file_lock(__stdin_used);
+		init_file_lock(__stdout_used);
+		init_file_lock(__stderr_used);
+		__syscall(SYS_rt_sigprocmask, SIG_UNBLOCK, SIGPT_SET, 0, _NSIG/8);
+		pthread_self()->tsd = (void **)__pthread_tsd_main;
+		__membarrier_init();
+		libc.threaded = 1;
+	}
+
+	return 0;
+}
+
+extern uintptr_t __stack_chk_guard;
+static struct pthread *new_tls(unsigned char *map, size_t size, size_t guard, unsigned char *tsd, unsigned char *stack, unsigned char *stack_limit, int detach, int tid) {
+	struct pthread *new;
+
+	new = __copy_tls(tsd - libc.tls_size);
+	new->prev = new->next = new;
+	new->map_base = map;
+	new->map_size = size;
+	new->stack = stack;
+	new->stack_size = stack - stack_limit;
+	new->guard_size = guard;
+	new->self = new;
+	new->tsd = (void *)tsd;
+	new->locale = &libc.global_locale;
+	if (detach) {
+		new->detach_state = DT_DETACHED;
+	} else {
+		new->detach_state = DT_JOINABLE;
+	}
+	new->robust_list.head = &new->robust_list.head;
+	new->canary = __stack_chk_guard;
+	new->sysinfo = __sysinfo;
+	new->tid = tid;
+
+	return new;
+}
+
+int __external_thread_register(int tid) {
+	struct pthread *new;
+	unsigned char *map, *tsd;
+	size_t size = ROUND(libc.tls_size + __pthread_tsd_size);
+
+	assert(libc.threaded);
+	map = __syscall(__NR_mmap, NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+	if ((unsigned long)map >= -4095UL) {
+		return -1;
+	}
+
+	tsd = map + size - __pthread_tsd_size;
+	new = new_tls(map, size, 0, tsd, 64*1024,32*1024, 1, tid);
+	new->external_thread = 1;
+	int ret = __tls_map_set(__get_tp(), TP_ADJ(new), tid);
+	if (ret < 0) {
+		__syscall(__NR_munmap, map, size);
+		return -1;
+	}
+
+	__tl_lock();
+	if (!libc.threads_minus_1++) libc.need_locks = 1;
+	__tl_unlock();
+	return 0;
+}
+
 int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict attrp, void *(*entry)(void *), void *restrict arg)
 {
 	int ret, c11 = (attrp == __ATTRP_C11_THREAD);
@@ -251,20 +327,8 @@ int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict att
 	pthread_attr_t attr = { 0 };
 	sigset_t set;
 
-	if (!libc.can_do_threads) return ENOSYS;
+	assert(libc.threaded);
 	self = __pthread_self();
-	if (!libc.threaded) {
-		for (FILE *f=*__ofl_lock(); f; f=f->next)
-			init_file_lock(f);
-		__ofl_unlock();
-		init_file_lock(__stdin_used);
-		init_file_lock(__stdout_used);
-		init_file_lock(__stderr_used);
-		__syscall(SYS_rt_sigprocmask, SIG_UNBLOCK, SIGPT_SET, 0, _NSIG/8);
-		self->tsd = (void **)__pthread_tsd_main;
-		__membarrier_init();
-		libc.threaded = 1;
-	}
 	if (attrp && !c11) attr = *attrp;
 
 	__acquire_ptc();
@@ -315,23 +379,7 @@ int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict att
 		}
 	}
 
-	new = __copy_tls(tsd - libc.tls_size);
-	new->map_base = map;
-	new->map_size = size;
-	new->stack = stack;
-	new->stack_size = stack - stack_limit;
-	new->guard_size = guard;
-	new->self = new;
-	new->tsd = (void *)tsd;
-	new->locale = &libc.global_locale;
-	if (attr._a_detach) {
-		new->detach_state = DT_DETACHED;
-	} else {
-		new->detach_state = DT_JOINABLE;
-	}
-	new->robust_list.head = &new->robust_list.head;
-	new->canary = self->canary;
-	new->sysinfo = self->sysinfo;
+	new = new_tls(map, size, guard, tsd, stack, stack_limit, attr._a_detach, 0);
 
 	/* Setup argument structure for the new thread on its stack.
 	 * It's safe to access from the caller only until the thread

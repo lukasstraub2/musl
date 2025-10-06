@@ -40,6 +40,7 @@ struct pthread {
 	volatile unsigned char canceldisable, cancelasync;
 	unsigned char tsd_used:1;
 	unsigned char dlerror_flag:1;
+	unsigned char external_thread:1;
 	unsigned char *map_base;
 	size_t map_size;
 	void *stack;
