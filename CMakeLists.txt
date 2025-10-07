@@ -170,10 +170,10 @@ list(APPEND LIBC_SRC_SUBDIRS "src/malloc/${MALLOC_DIR}")
 
 musl_find_sources(LIBC_SOURCES "${LIBC_SRC_SUBDIRS}")
 
-add_library(c STATIC ${LIBC_SOURCES})
-add_dependencies(c generate_headers)
-target_include_directories(c PRIVATE ${INCLUDE_ALL})
-target_compile_options(c PRIVATE ${CFLAGS_ALL})
+add_library(libc STATIC ${LIBC_SOURCES})
+add_dependencies(libc generate_headers)
+target_include_directories(libc PRIVATE ${INCLUDE_ALL})
+target_compile_options(libc PRIVATE ${CFLAGS_ALL})
 
 # --- Per-file compile flags ---
 
@@ -212,8 +212,15 @@ endif()
 # -----------------------------------------------------------------------------
 # Interface for Consumers
 # -----------------------------------------------------------------------------
+add_library(c INTERFACE)
 target_compile_options(c INTERFACE -nostdinc -fPIE -femulated-tls)
-target_include_directories(c INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/arch/${ARCH} ${CMAKE_CURRENT_SOURCE_DIR}/arch/generic ${CMAKE_CURRENT_SOURCE_DIR}/include ${GENERATED_H_DIR})
-target_link_libraries(c INTERFACE -nostartfiles -nodefaultlibs -nostdlib ${LIBGCC})
+target_include_directories(c INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/arch/${ARCH}
+    ${CMAKE_CURRENT_SOURCE_DIR}/arch/generic
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${GENERATED_H_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/internal
+)
+target_link_libraries(c INTERFACE -nostartfiles -nodefaultlibs -nostdlib "$<LINK_GROUP:RESCAN,libc,${LIBGCC}>")
 
 message(STATUS "Configuration complete.")
