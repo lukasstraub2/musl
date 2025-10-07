@@ -147,7 +147,8 @@ int __tls_map_set(uintptr_t key, uintptr_t value, int tid) {
 	struct kv_t *kv = tls_map_lookup(tls_map, key);
 	if (kv) {
 		assert((kv->key & KEY_MASK) == (key & KEY_MASK));
-		assert(kv->tid == tid);
+		// This does not hold after fork()
+		//assert(kv->tid == tid);
 		kv->value = value;
 		__tls_unlock(&writer_lock);
 		return 0;
