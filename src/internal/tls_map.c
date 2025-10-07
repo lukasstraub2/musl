@@ -198,11 +198,11 @@ uintptr_t __tls_map_get_tp() {
 	__tls_lock(&writer_lock);
 	kv = tls_map_lookup_tid(tls_map, tid);
 	assert(kv);
-	struct kv_t copy = *kv;
+	uintptr_t value = kv->value;
 
 	tls_map_clear(tls_map, kv);
-	tls_map_insert(tls_map, copy.key, copy.value, tid);
+	tls_map_insert(tls_map, ptr, value, tid);
 	__tls_unlock(&writer_lock);
 
-	return copy.value;
+	return value;
 }
