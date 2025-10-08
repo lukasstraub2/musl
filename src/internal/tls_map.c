@@ -7,6 +7,7 @@
 #include "sys/mman.h"
 #include "syscall.h"
 #include <assert.h>
+#include "tls_lock.h"
 
 #include "tls_map.h"
 
@@ -38,11 +39,11 @@ static struct tls_map_t *tls_map_alloc(uintptr_t p) {
 	size = ROUND(size);
 
 	uintptr_t ret = __syscall(__NR_mmap, NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
-	if ((unsigned long)ret >= -4095UL) {
+	if (ret >= -4095UL) {
 		return NULL;
 	}
 
-	struct tls_map_t *map = ret;
+	struct tls_map_t *map = (struct tls_map_t *)ret;
 	map->num_entries = 0;
 	map->p = p;
 
@@ -112,7 +113,7 @@ static int tls_map_insert(struct tls_map_t *map, uintptr_t _insert_key, uintptr_
 
 static void tls_map_clear(struct tls_map_t *map, struct kv_t *kv) {
 	__atomic_store_n(&kv->key, kv->key & TOMBSTONE, __ATOMIC_RELAXED);
-	kv->value = NULL;
+	kv->value = 0;
 	kv->tid = 0;
 }
 
@@ -142,7 +143,8 @@ static int tls_map_maybe_migrate() {
 	return 0;
 }
 
-int __tls_map_set(uintptr_t key, uintptr_t value, int tid) {
+int __tls_map_set(uintptr_t key, void *_value, int tid) {
+	uintptr_t value = (uintptr_t)_value;
 	__tls_lock(&writer_lock);
 	struct kv_t *kv = tls_map_lookup(tls_map, key);
 	if (kv) {

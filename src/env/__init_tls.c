@@ -20,7 +20,7 @@ int __init_tp(void *p)
 	if (r < 0) return -1;
 	r = __set_thread_area(TP_ADJ(p));
 	if (r < 0) return -1;
-	r = __tls_map_set(TP_ADJ(p), TP_ADJ(p), __syscall(__NR_gettid));
+	r = __tls_map_set(__get_tp(), TP_ADJ(p), __syscall(__NR_gettid));
 	if (r < 0) return -1;
 	if (!r) libc.can_do_threads = 1;
 	td->detach_state = DT_JOINABLE;

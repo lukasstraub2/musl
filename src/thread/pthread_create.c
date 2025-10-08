@@ -211,7 +211,7 @@ static int start(void *p)
 			for (;;) __syscall(SYS_exit, 0);
 		}
 	}
-	__tls_map_set(TP_ADJ(args->tls), TP_ADJ(args->tls), args->tls->tid);
+	__tls_map_set(__get_tp(), TP_ADJ(args->tls), args->tls->tid);
 	__syscall(SYS_rt_sigprocmask, SIG_SETMASK, &args->sig_mask, 0, _NSIG/8);
 	__pthread_exit(args->start_func(args->start_arg));
 	return 0;
@@ -220,7 +220,7 @@ static int start(void *p)
 static int start_c11(void *p)
 {
 	struct start_args *args = p;
-	__tls_map_set(TP_ADJ(args->tls), TP_ADJ(args->tls), args->tls->tid);
+	__tls_map_set(__get_tp(), TP_ADJ(args->tls), args->tls->tid);
 	int (*start)(void*) = (int(*)(void*)) args->start_func;
 	__pthread_exit((void *)(uintptr_t)start(args->start_arg));
 	return 0;
@@ -295,13 +295,14 @@ int __external_thread_register(int tid) {
 	size_t size = ROUND(libc.tls_size + __pthread_tsd_size);
 
 	assert(libc.threaded);
-	map = __syscall(__NR_mmap, NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+	// TLS is not set up, we are not allowed to touch errno
+	map = (unsigned char *)__syscall(__NR_mmap, NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
 	if ((unsigned long)map >= -4095UL) {
 		return -1;
 	}
 
 	tsd = map + size - __pthread_tsd_size;
-	new = new_tls(map, size, 0, tsd, 64*1024,32*1024, 1, tid);
+	new = new_tls(map, size, 0, tsd, (unsigned char*)(64*1024), (unsigned char*)(32*1024), 1, tid);
 	new->external_thread = 1;
 	int ret = __tls_map_set(__get_tp(), TP_ADJ(new), tid);
 	if (ret < 0) {
