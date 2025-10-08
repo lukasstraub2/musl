@@ -9,5 +9,6 @@ int __tls_map_init();
 int __tls_map_set(uintptr_t key, void *value, int tid);
 void __tls_map_del(int tid);
 uintptr_t __tls_map_get_tp();
+int tls_map_new_tid();
 
 #endif

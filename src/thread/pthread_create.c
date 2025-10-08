@@ -316,6 +316,15 @@ int __external_thread_register(int tid) {
 	return 0;
 }
 
+int __external_thread_register_maybe() {
+	int tid = tls_map_new_tid();
+	if (tid) {
+		return __external_thread_register(tid);
+	}
+
+	return 0;
+}
+
 int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict attrp, void *(*entry)(void *), void *restrict arg)
 {
 	int ret, c11 = (attrp == __ATTRP_C11_THREAD);

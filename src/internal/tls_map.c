@@ -212,3 +212,23 @@ uintptr_t __tls_map_get_tp() {
 
 	return value;
 }
+
+int tls_map_new_tid() {
+	struct tls_map_t *map = __atomic_load_n(&tls_map, __ATOMIC_ACQUIRE);
+	uintptr_t ptr = __get_tp();
+	struct kv_t *kv;
+
+	kv = tls_map_lookup(map, ptr);
+	if (kv) {
+		return 0;
+	}
+
+	int tid = __syscall(__NR_gettid);
+
+	kv = tls_map_lookup_tid(tls_map, tid);
+	if (kv) {
+		return 0;
+	}
+
+	return tid;
+}
