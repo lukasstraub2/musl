@@ -7,7 +7,7 @@
 #include "sys/mman.h"
 #include "syscall.h"
 #include <assert.h>
-#include "tls_lock.h"
+#include "lock.h"
 
 #include "tls_map.h"
 
@@ -30,7 +30,8 @@ struct tls_map_t {
 };
 
 static struct tls_map_t *tls_map = NULL;
-static int writer_lock = 0;
+static volatile int writer_lock[1];
+volatile int *const __tls_map_lockptr = writer_lock;
 
 #define ROUND(x) (((x)+PAGE_SIZE-1)&-PAGE_SIZE)
 
@@ -145,45 +146,45 @@ static int tls_map_maybe_migrate() {
 
 int __tls_map_set(uintptr_t key, void *_value, int tid) {
 	uintptr_t value = (uintptr_t)_value;
-	__tls_lock(&writer_lock);
+	LOCK(writer_lock);
 	struct kv_t *kv = tls_map_lookup(tls_map, key);
 	if (kv) {
 		assert((kv->key & KEY_MASK) == (key & KEY_MASK));
 		// This does not hold after fork()
 		//assert(kv->tid == tid);
 		kv->value = value;
-		__tls_unlock(&writer_lock);
+		UNLOCK(writer_lock);
 		return 0;
 	}
 
 	int ret = tls_map_maybe_migrate();
 	if (ret < 0) {
-		__tls_unlock(&writer_lock);
+		UNLOCK(writer_lock);
 		return -1;
 	}
 
 	if (tls_map->num_entries >= tls_map->p) {
-		__tls_unlock(&writer_lock);
+		UNLOCK(writer_lock);
 		return -1;
 	}
 
 	tls_map_insert(tls_map, key, value, tid);
 	tls_map->num_entries++;
 
-	__tls_unlock(&writer_lock);
+	UNLOCK(writer_lock);
 	return 0;
 }
 
 void __tls_map_del(int tid) {
-	__tls_lock(&writer_lock);
+	LOCK(writer_lock);
 	struct kv_t *kv = tls_map_lookup_tid(tls_map, tid);
 	if (!kv) {
-		__tls_unlock(&writer_lock);
+		UNLOCK(writer_lock);
 		return;
 	}
 	tls_map_clear(tls_map, kv);
 	tls_map->num_entries--;
-	__tls_unlock(&writer_lock);
+	UNLOCK(writer_lock);
 }
 
 uintptr_t __tls_map_get_tp() {
@@ -198,14 +199,14 @@ uintptr_t __tls_map_get_tp() {
 
 	int tid = __syscall(__NR_gettid);
 
-	__tls_lock(&writer_lock);
+	LOCK(writer_lock);
 	kv = tls_map_lookup_tid(tls_map, tid);
 	assert(kv);
 	uintptr_t value = kv->value;
 
 	tls_map_clear(tls_map, kv);
 	tls_map_insert(tls_map, ptr, value, tid);
-	__tls_unlock(&writer_lock);
+	UNLOCK(writer_lock);
 
 	return value;
 }

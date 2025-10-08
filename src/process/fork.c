@@ -4,6 +4,7 @@
 #include "lock.h"
 #include "pthread_impl.h"
 #include "fork_impl.h"
+#include "tls_map.h"
 
 static volatile int *const dummy_lockptr = 0;
 
@@ -31,6 +32,7 @@ static volatile int *const *const atfork_locks[] = {
 	&__syslog_lockptr,
 	&__timezone_lockptr,
 	&__bump_lockptr,
+	&__tls_map_lockptr
 };
 
 static void dummy(int x) { }

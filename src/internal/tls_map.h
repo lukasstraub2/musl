@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+extern volatile int *const __tls_map_lockptr;
+
 int __tls_map_init();
 int __tls_map_set(uintptr_t key, void *value, int tid);
 void __tls_map_del(int tid);
