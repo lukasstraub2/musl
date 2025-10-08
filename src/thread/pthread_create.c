@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include "tls_map.h"
 #include <assert.h>
+#include "emutls.h"
 
 static void dummy_0()
 {
@@ -116,6 +117,7 @@ _Noreturn void __pthread_exit(void *result)
 	 * see the thread as having exited. Release it now so that no
 	 * remaining locks (except thread list) are held if we end up
 	 * resetting need_locks below. */
+	emutls_free();
 	__tls_map_del(self->tid);
 	self->tid = 0;
 	UNLOCK(self->killlock);

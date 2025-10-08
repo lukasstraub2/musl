@@ -25,6 +25,23 @@ struct emutls_array {
 static pthread_mutex_t emutls_mutex = PTHREAD_MUTEX_INITIALIZER;
 static size_t emutls_num_object = 0;
 
+void emutls_free() {
+	struct pthread *self = __pthread_self();
+	struct emutls_array *array = self->emutls_array;
+
+	if (!array) {
+		return;
+	}
+
+	for (uintptr_t i = 0; i < array->len; ++i) {
+		if (array->data[i]) {
+			free(array->data[i]);
+		}
+	}
+
+	free(array);
+}
+
 void *__emutls_get_address(struct __emutls_control *control)
 {
 	struct pthread *self = __pthread_self();
