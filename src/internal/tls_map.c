@@ -6,7 +6,6 @@
 #include "libc.h"
 #include "sys/mman.h"
 #include "syscall.h"
-#include <assert.h>
 #include "lock.h"
 
 #include "tls_map.h"
@@ -149,9 +148,9 @@ int __tls_map_set(uintptr_t key, void *_value, int tid) {
 	LOCK(writer_lock);
 	struct kv_t *kv = tls_map_lookup(tls_map, key);
 	if (kv) {
-		assert((kv->key & KEY_MASK) == (key & KEY_MASK));
-		// This does not hold after fork()
-		//assert(kv->tid == tid);
+		if ((kv->key & KEY_MASK) != (key & KEY_MASK)) {
+			abort();
+		}
 		kv->value = value;
 		UNLOCK(writer_lock);
 		return 0;
@@ -201,7 +200,10 @@ uintptr_t __tls_map_get_tp() {
 
 	LOCK(writer_lock);
 	kv = tls_map_lookup_tid(tls_map, tid);
-	assert(kv);
+	if (!kv) {
+		UNLOCK(writer_lock);
+		abort();
+	}
 	uintptr_t value = kv->value;
 
 	tls_map_clear(tls_map, kv);
