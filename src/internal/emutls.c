@@ -88,7 +88,11 @@ void *__emutls_get_address(struct __emutls_control *control)
 
 	void *ret = array->data[index - 1];
 	if (__builtin_expect(!ret, 0)) {
-		int ret2 = posix_memalign(&ret, control->align, control->size);
+		gcc_word align = control->align;
+		if (align < sizeof(void *)) {
+			align = sizeof(void *);
+		}
+		int ret2 = posix_memalign(&ret, align, control->size);
 		if (ret2) {
 			abort();
 		}
