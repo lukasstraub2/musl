@@ -64,7 +64,7 @@ static struct kv_t *tls_map_lookup(struct tls_map_t *map, uintptr_t _search_key)
 	uintptr_t search_key = _search_key & KEY_MASK;
 	uintptr_t idx = search_key % map->p;
 
-	while (1) {
+	for (int i = 0; i < map->p; i++) {
 		struct kv_t *kv = map->map + idx;
 		uintptr_t _key = __atomic_load_n(&kv->key, __ATOMIC_RELAXED);
 		uintptr_t key = _key & KEY_MASK;
@@ -76,6 +76,8 @@ static struct kv_t *tls_map_lookup(struct tls_map_t *map, uintptr_t _search_key)
 
 		idx = (idx + INTERVAL) % map->p;
 	}
+
+	return NULL;
 }
 
 static struct kv_t *tls_map_lookup_tid(struct tls_map_t *map, int tid) {
