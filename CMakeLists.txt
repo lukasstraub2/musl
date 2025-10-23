@@ -29,6 +29,13 @@ else()
     set(LIBGCC -lcompiler_rt)
 endif()
 
+check_linker_flag(CXX "-static;-lgcc_eh" USE_LIBGCC_UNWIND)
+if(USE_LIBGCC_UNWIND)
+    set(LIBUNWIND -lgcc_eh)
+else()
+    set(LIBUNWIND -lunwind)
+endif()
+
 set(CFLAGS_AUTO -O2 -fno-align-functions -pipe -fomit-frame-pointer -fno-unwind-tables -fno-asynchronous-unwind-tables -ffunction-sections -fdata-sections -w -Wno-pointer-to-int-cast -Werror=implicit-function-declaration -Werror=implicit-int -Werror=pointer-sign -Werror=pointer-arith -Werror=int-conversion -Werror=incompatible-pointer-types -Qunused-arguments -Waddress -Warray-bounds -Wchar-subscripts -Wduplicate-decl-specifier -Winit-self -Wreturn-type -Wsequence-point -Wstrict-aliasing -Wunused-function -Wunused-label -Wunused-variable)
 set(CFLAGS_C99FSE -std=c99 -nostdinc -ffreestanding -frounding-math -fno-strict-aliasing -Wa,--noexecstack)
 set(CFLAGS_MEMOPS "")
@@ -171,10 +178,11 @@ list(APPEND LIBC_SRC_SUBDIRS "src/malloc/${MALLOC_DIR}")
 
 musl_find_sources(LIBC_SOURCES "${LIBC_SRC_SUBDIRS}")
 
-add_library(libc STATIC ${LIBC_SOURCES})
-add_dependencies(libc generate_headers)
-target_include_directories(libc PRIVATE ${INCLUDE_ALL})
-target_compile_options(libc PRIVATE ${CFLAGS_ALL})
+add_library(c STATIC ${LIBC_SOURCES})
+add_dependencies(c generate_headers)
+target_include_directories(c PRIVATE ${INCLUDE_ALL})
+target_compile_options(c PRIVATE ${CFLAGS_ALL})
+set_target_properties(c PROPERTIES LINK_INTERFACE_MULTIPLICITY 3)
 
 # --- Per-file compile flags ---
 
@@ -213,15 +221,25 @@ endif()
 # -----------------------------------------------------------------------------
 # Interface for Consumers
 # -----------------------------------------------------------------------------
-add_library(c INTERFACE)
-target_compile_options(c INTERFACE -nostdinc -fPIE -femulated-tls)
-target_include_directories(c INTERFACE
+add_library(libc INTERFACE)
+target_compile_options(libc INTERFACE -nostdinc -fPIE -femulated-tls)
+target_include_directories(libc INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/arch/${ARCH}
     ${CMAKE_CURRENT_SOURCE_DIR}/arch/generic
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${GENERATED_H_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/internal
 )
-target_link_libraries(c INTERFACE -nostartfiles -nodefaultlibs -nostdlib "$<LINK_GROUP:RESCAN,libc,${LIBGCC}>")
+
+# Pass libraries as linker flags to prevent cmake from touching the order
+target_link_libraries(libc INTERFACE
+    -nostartfiles -nodefaultlibs -nostdlib
+    -Wl,-z,muldefs
+    -L${CMAKE_CURRENT_BINARY_DIR}
+    -Wl,-lc
+    -Wl,${LIBGCC}
+    -Wl,${LIBUNWIND}
+    c
+)
 
 message(STATUS "Configuration complete.")
