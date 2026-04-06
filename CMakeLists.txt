@@ -236,9 +236,11 @@ target_link_libraries(libc INTERFACE
     -nostartfiles -nodefaultlibs -nostdlib
     -Wl,-z,muldefs
     -L${CMAKE_CURRENT_BINARY_DIR}
+    -Wl,--start-group
     -Wl,-lc
     -Wl,${LIBGCC}
     -Wl,${LIBUNWIND}
+    -Wl,--end-group
     c
 )
 
